@@ -19,27 +19,27 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Uploader_Upload_FullMethodName = "/storage.v1.Uploader/Upload"
+	UploaderService_Upload_FullMethodName = "/storage.v1.UploaderService/Upload"
 )
 
-// UploaderClient is the client API for Uploader service.
+// UploaderServiceClient is the client API for UploaderService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type UploaderClient interface {
+type UploaderServiceClient interface {
 	Upload(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadRequest, UploadResponse], error)
 }
 
-type uploaderClient struct {
+type uploaderServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewUploaderClient(cc grpc.ClientConnInterface) UploaderClient {
-	return &uploaderClient{cc}
+func NewUploaderServiceClient(cc grpc.ClientConnInterface) UploaderServiceClient {
+	return &uploaderServiceClient{cc}
 }
 
-func (c *uploaderClient) Upload(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadRequest, UploadResponse], error) {
+func (c *uploaderServiceClient) Upload(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadRequest, UploadResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Uploader_ServiceDesc.Streams[0], Uploader_Upload_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &UploaderService_ServiceDesc.Streams[0], UploaderService_Upload_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -48,65 +48,65 @@ func (c *uploaderClient) Upload(ctx context.Context, opts ...grpc.CallOption) (g
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Uploader_UploadClient = grpc.ClientStreamingClient[UploadRequest, UploadResponse]
+type UploaderService_UploadClient = grpc.ClientStreamingClient[UploadRequest, UploadResponse]
 
-// UploaderServer is the server API for Uploader service.
-// All implementations must embed UnimplementedUploaderServer
+// UploaderServiceServer is the server API for UploaderService service.
+// All implementations must embed UnimplementedUploaderServiceServer
 // for forward compatibility.
-type UploaderServer interface {
+type UploaderServiceServer interface {
 	Upload(grpc.ClientStreamingServer[UploadRequest, UploadResponse]) error
-	mustEmbedUnimplementedUploaderServer()
+	mustEmbedUnimplementedUploaderServiceServer()
 }
 
-// UnimplementedUploaderServer must be embedded to have
+// UnimplementedUploaderServiceServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedUploaderServer struct{}
+type UnimplementedUploaderServiceServer struct{}
 
-func (UnimplementedUploaderServer) Upload(grpc.ClientStreamingServer[UploadRequest, UploadResponse]) error {
+func (UnimplementedUploaderServiceServer) Upload(grpc.ClientStreamingServer[UploadRequest, UploadResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method Upload not implemented")
 }
-func (UnimplementedUploaderServer) mustEmbedUnimplementedUploaderServer() {}
-func (UnimplementedUploaderServer) testEmbeddedByValue()                  {}
+func (UnimplementedUploaderServiceServer) mustEmbedUnimplementedUploaderServiceServer() {}
+func (UnimplementedUploaderServiceServer) testEmbeddedByValue()                         {}
 
-// UnsafeUploaderServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to UploaderServer will
+// UnsafeUploaderServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to UploaderServiceServer will
 // result in compilation errors.
-type UnsafeUploaderServer interface {
-	mustEmbedUnimplementedUploaderServer()
+type UnsafeUploaderServiceServer interface {
+	mustEmbedUnimplementedUploaderServiceServer()
 }
 
-func RegisterUploaderServer(s grpc.ServiceRegistrar, srv UploaderServer) {
-	// If the following call pancis, it indicates UnimplementedUploaderServer was
+func RegisterUploaderServiceServer(s grpc.ServiceRegistrar, srv UploaderServiceServer) {
+	// If the following call pancis, it indicates UnimplementedUploaderServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&Uploader_ServiceDesc, srv)
+	s.RegisterService(&UploaderService_ServiceDesc, srv)
 }
 
-func _Uploader_Upload_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(UploaderServer).Upload(&grpc.GenericServerStream[UploadRequest, UploadResponse]{ServerStream: stream})
+func _UploaderService_Upload_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(UploaderServiceServer).Upload(&grpc.GenericServerStream[UploadRequest, UploadResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Uploader_UploadServer = grpc.ClientStreamingServer[UploadRequest, UploadResponse]
+type UploaderService_UploadServer = grpc.ClientStreamingServer[UploadRequest, UploadResponse]
 
-// Uploader_ServiceDesc is the grpc.ServiceDesc for Uploader service.
+// UploaderService_ServiceDesc is the grpc.ServiceDesc for UploaderService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Uploader_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "storage.v1.Uploader",
-	HandlerType: (*UploaderServer)(nil),
+var UploaderService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "storage.v1.UploaderService",
+	HandlerType: (*UploaderServiceServer)(nil),
 	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Upload",
-			Handler:       _Uploader_Upload_Handler,
+			Handler:       _UploaderService_Upload_Handler,
 			ClientStreams: true,
 		},
 	},

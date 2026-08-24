@@ -1,1 +1,1 @@
-package compressor
+package main
