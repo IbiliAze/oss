@@ -10,7 +10,7 @@ import (
 
 var addr string = "0.0.0.0:50051"
 
-type server struct {
+type Server struct {
 	pb.UploaderServiceServer
 }
 
@@ -24,6 +24,7 @@ func main() {
 	log.Printf("Listening on %s\n", addr)
 
 	s := grpc.NewServer()
+	pb.RegisterUploaderServiceServer(s, &Server{})
 
 	if err = s.Serve(lis); err != nil {
 		log.Fatalf("Failed to server: %v\n", err)
