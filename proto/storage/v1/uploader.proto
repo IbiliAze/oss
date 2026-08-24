@@ -1,13 +1,25 @@
 syntax = "proto3";
+package storage.v1;
+option go_package = "github.com/IbiliAze/oss/gen/storage/v1;storagev1";
 
-package oss;
-
-option go_package = "github.com/IbiliAze/oss/proto/storage/v1";
-
-message Blob {
-    uint32 id  = 1;
+service UploaderService {
+  rpc Upload(stream UploadRequest) returns (UploadResponse);
 }
 
-service BlobService {
-  
+message UploadRequest {
+  oneof payload {
+    UploadHeader header = 1;  // first message
+    bytes chunk = 2;          // then N chunks
+  }
+}
+
+message UploadHeader {
+  string filename = 1;
+  string content_type = 2;
+  int64 size_bytes = 3;
+}
+
+message UploadResponse {
+  string object_id = 1;
+  string sha256 = 2;
 }
