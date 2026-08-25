@@ -19,7 +19,7 @@ func doUpload(ctx context.Context, c pb.UploaderServiceClient) error {
 	if err := stream.Send(&pb.UploadRequest{
 		Payload: &pb.UploadRequest_Header{
 			Header: &pb.UploadHeader{
-				Filename:    "file_1.txt",
+				Key:         "uploads/file_1.txt",
 				ContentType: "application/json",
 				SizeBytes:   123,
 			},
@@ -33,6 +33,6 @@ func doUpload(ctx context.Context, c pb.UploaderServiceClient) error {
 		return fmt.Errorf("close and recv: %w", err)
 	}
 
-	log.Printf("uploaded: object_id=%s sha256=%s", resp.ObjectId, resp.Sha256)
+	log.Printf("uploaded: key=%s object_id=%s sha256=%s", resp.Key, resp.ObjectId, resp.Sha256)
 	return nil
 }
