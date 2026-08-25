@@ -11,7 +11,7 @@ import (
 var addr string = "0.0.0.0:50051"
 
 type Server struct {
-	pb.UnimplementedUploaderServiceServer
+	pb.UploaderServiceServer
 }
 
 func main() {
