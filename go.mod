@@ -1,4 +1,4 @@
-module github.com/IbiliAze/oss
+module github.com/IbiliAze/vaultlet
 
 go 1.26.1
 
