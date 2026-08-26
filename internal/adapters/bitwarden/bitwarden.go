@@ -197,12 +197,25 @@ func versionAt(t time.Time) (domain.Version, error) {
 }
 
 func (s *Store) Delete(ctx context.Context, key domain.Key) error {
-	defer s.Close()
-	_, err := s.client.Secrets().Delete([]string{})
-	if err != nil {
-		return fmt.Errorf("bitwarden: delete secrets error: %w", err)
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
+	id, err := s.resolveID(key)
+	if err != nil {
+		return err
+	}
+
+	res, err := s.client.Secrets().Delete([]string{id})
+	if err != nil {
+		return fmt.Errorf("bitwarden: delete secret %s: %w", key, err)
+	}
+
+	for _, d := range res.Data {
+		if d.Error != nil {
+			return fmt.Errorf("bitwarden: delete secret %s: %s", key, *d.Error)
+		}
+	}
 	return nil
 }
 
