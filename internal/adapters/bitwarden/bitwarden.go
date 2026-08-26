@@ -3,6 +3,8 @@ package bitwarden
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/IbiliAze/vaultlet/internal/domain"
@@ -55,11 +57,9 @@ func (s *Store) Get(ctx context.Context, key domain.Key) (domain.Secret, error) 
 		return domain.Secret{}, fmt.Errorf("bitwarden: get secret %s: %w", key, err)
 	}
 
-	// Bitwarden has no version identifier of its own; RevisionDate is the only
-	// value that changes on every write, so it stands in as the opaque version.
-	version, err := domain.NewVersion(res.RevisionDate.UTC().Format(time.RFC3339Nano))
+	version, err := versionAt(res.RevisionDate)
 	if err != nil {
-		return domain.Secret{}, fmt.Errorf("bitwarden: secret %s has no revision date: %w", key, err)
+		return domain.Secret{}, fmt.Errorf("bitwarden: secret %s: %w", key, err)
 	}
 
 	return domain.NewSecret(domain.SecretMeta{
@@ -103,27 +103,102 @@ func (s *Store) inProject(projectIDs []string) bool {
 
 func (s *Store) Put(ctx context.Context, key domain.Key, value []byte) (domain.Version, error) {
 	defer s.Close()
-	res, err := s.client.Secrets().Update("", "", string(value))
+	id, err := s.resolveID(key)
+	if err != nil {
+		return domain.Version{}, err
+	}
+
+	_, err = s.client.Secrets().Update(id, key.String(), string(value), "updated", s.orgID, []string{})
 	if err != nil {
 		return domain.Version{}, fmt.Errorf("bitwarden: update secret error: %w", err)
 	}
 
-	return domain.Version{}, nil
+	return domain.NewVersion(id)
 }
 
+// List returns metadata for every secret at or beneath ns, sorted by key.
+// A zero Namespace lists everything in scope.
+//
+// This costs two round trips: the identifiers endpoint carries no dates, so the
+// UUIDs falling under ns are collected first and their metadata fetched in one
+// bulk call. GetByIDS returns secret values too; they are deliberately dropped,
+// since SecretMeta exists precisely so callers can list without handling them.
 func (s *Store) List(ctx context.Context, ns domain.Namespace) ([]domain.SecretMeta, error) {
-	defer s.Close()
-	res, err := s.client.Secrets().List(s.orgID)
-	if err != nil {
-		return nil, fmt.Errorf("bitwarden: list secrets error: %w", err)
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
-	return []domain.SecretMeta{}, nil
+	res, err := s.client.Secrets().List(s.orgID)
+	if err != nil {
+		return nil, fmt.Errorf("bitwarden: list secrets: %w", err)
+	}
+
+	ids := make([]string, 0, len(res.Data))
+	for _, ident := range res.Data {
+		if !s.inProject(ident.ProjectIDS) {
+			continue
+		}
+		// Secrets written outside vaultlet need not follow the key grammar.
+		// They are not ours to report, so skip them rather than failing the
+		// whole listing on one foreign name.
+		key, err := domain.ParseKey(ident.Key)
+		if err != nil {
+			continue
+		}
+		if !ns.Contains(key.Namespace()) {
+			continue
+		}
+		ids = append(ids, ident.ID)
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	full, err := s.client.Secrets().GetByIDS(ids)
+	if err != nil {
+		return nil, fmt.Errorf("bitwarden: get secrets by id: %w", err)
+	}
+
+	out := make([]domain.SecretMeta, 0, len(full.Data))
+	for _, sec := range full.Data {
+		key, err := domain.ParseKey(sec.Key)
+		if err != nil {
+			continue
+		}
+		version, err := versionAt(sec.RevisionDate)
+		if err != nil {
+			return nil, fmt.Errorf("bitwarden: secret %s: %w", key, err)
+		}
+		out = append(out, domain.SecretMeta{
+			Key:       key,
+			Version:   version,
+			CreatedAt: sec.CreationDate.UTC(),
+		})
+	}
+
+	slices.SortFunc(out, func(a, b domain.SecretMeta) int {
+		return strings.Compare(a.Key.String(), b.Key.String())
+	})
+	return out, nil
+}
+
+// versionLayout is RFC 3339 with fixed-width nanoseconds. The stdlib's
+// RFC3339Nano strips trailing zeros, which makes versions vary in width and
+// sort incorrectly; padding with zeros keeps full precision so two writes in
+// the same second stay distinguishable.
+const versionLayout = "2006-01-02T15:04:05.000000000Z07:00"
+
+// versionAt derives a domain.Version from a Bitwarden revision date. Bitwarden
+// has no version identifier of its own, and RevisionDate is the only field that
+// changes on every write. Every method must build versions through here, or
+// values from Get and List will not compare equal.
+func versionAt(t time.Time) (domain.Version, error) {
+	return domain.NewVersion(t.UTC().Format(versionLayout))
 }
 
 func (s *Store) Delete(ctx context.Context, key domain.Key) error {
 	defer s.Close()
-	res, err := s.client.Secrets().Delete([]string{})
+	_, err := s.client.Secrets().Delete([]string{})
 	if err != nil {
 		return fmt.Errorf("bitwarden: delete secrets error: %w", err)
 	}
