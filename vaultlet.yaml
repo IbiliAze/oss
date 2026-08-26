@@ -1,3 +1,9 @@
 ---
 listen: 0.0.0.0:50051
 backend: bitwarden
+bitwarden:
+  api_url: ''
+  identity_url: ''
+  project_id: ''
+  access_token: ''
+  poll_interval: ''
