@@ -2,6 +2,7 @@ package bitwarden
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -102,18 +103,42 @@ func (s *Store) inProject(projectIDs []string) bool {
 }
 
 func (s *Store) Put(ctx context.Context, key domain.Key, value []byte) (domain.Version, error) {
-	defer s.Close()
-	id, err := s.resolveID(key)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return domain.Version{}, err
 	}
 
-	_, err = s.client.Secrets().Update(id, key.String(), string(value), "updated", s.orgID, []string{})
-	if err != nil {
-		return domain.Version{}, fmt.Errorf("bitwarden: update secret error: %w", err)
+	if len(value) == 0 {
+		return domain.Version{}, domain.ErrEmptyValue
 	}
 
-	return domain.NewVersion(id)
+	projects := []string{}
+	if s.projectID != "" {
+		projects = []string{s.projectID}
+	}
+
+	id, err := s.resolveID(key)
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		res, err := s.client.Secrets().Create(key.String(), string(value), "", s.orgID, projects)
+		if err != nil {
+			return domain.Version{}, fmt.Errorf("bitwarden: create secret %s: %w", key, err)
+		}
+		return versionAt(res.RevisionDate)
+	case err != nil:
+		return domain.Version{}, err
+	}
+
+	// Update replaces every field, so the note has to be carried across.
+	prev, err := s.client.Secrets().Get(id)
+	if err != nil {
+		return domain.Version{}, fmt.Errorf("bitwarden: read secret %s before update: %w", key, err)
+	}
+
+	res, err := s.client.Secrets().Update(id, key.String(), string(value), prev.Note, s.orgID, projects)
+	if err != nil {
+		return domain.Version{}, fmt.Errorf("bitwarden: update secret %s: %w", key, err)
+	}
+	return versionAt(res.RevisionDate)
 }
 
 // List returns metadata for every secret at or beneath ns, sorted by key.
