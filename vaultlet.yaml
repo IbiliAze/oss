@@ -4,6 +4,7 @@ backend: bitwarden
 bitwarden:
   api_url: ''
   identity_url: ''
+  org_id: ''
   project_id: ''
   access_token: ''
   poll_interval: ''

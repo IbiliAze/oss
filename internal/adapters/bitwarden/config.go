@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	APIURL       string        `koanf:"api_url"`
+	OrgID        string        `koanf:"org_id"`
 	IdentityURL  string        `koanf:"identity_url"`
 	ProjectID    string        `koanf:"project_id"`
 	AccessToken  string        `koanf:"access_token"`

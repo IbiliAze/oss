@@ -108,6 +108,21 @@ func NewKey(ns Namespace, name string) (Key, error) {
 
 func (k Key) IsZero() bool { return k.name == "" }
 
+// Namespace returns the key's enclosing namespace.
+func (k Key) Namespace() Namespace { return k.ns }
+
+// Name returns the leaf name, without the namespace.
+func (k Key) Name() string { return k.name }
+
+// String renders the canonical "namespace/name" form. It is the wire form
+// adapters should use when a backend stores secrets under a flat name.
+func (k Key) String() string {
+	if k.IsZero() {
+		return ""
+	}
+	return k.ns.String() + "/" + k.name
+}
+
 // --- Namespace methods -------------------------------------------------------
 
 func (n Namespace) String() string { return strings.Join(n.segments, "/") }
