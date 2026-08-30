@@ -3,14 +3,14 @@ module github.com/IbiliAze/vaultlet
 go 1.26.1
 
 require (
+	github.com/bitwarden/sdk-go/v2 v2.1.0
+	github.com/knadh/koanf v1.5.0
 	google.golang.org/grpc v1.83.1
 	google.golang.org/protobuf v1.36.12
 )
 
 require (
-	github.com/bitwarden/sdk-go/v2 v2.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
-	github.com/knadh/koanf v1.5.0 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect

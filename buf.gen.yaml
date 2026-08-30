@@ -3,11 +3,11 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/IbiliAze/vaultlet/gen
+      value: github.com/IbiliAze/vaultlet/api/gen
 plugins:
   - local: protoc-gen-go
-    out: gen
+    out: api/gen
     opt: paths=source_relative
   - local: protoc-gen-go-grpc
-    out: gen
+    out: api/gen
     opt: paths=source_relative

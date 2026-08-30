@@ -7,8 +7,8 @@ PROTOC_GEN_GO_VERSION    := v1.36.4
 PROTOC_GEN_GO_GRPC_VERSION := v1.5.1
 
 BIN        := $(CURDIR)/bin
-PROTO_DIR  := proto
-GEN_DIR    := gen
+PROTO_DIR  := api/proto
+GEN_DIR    := api/gen
 export PATH := $(BIN):$(PATH)
 
 BUF               := $(BIN)/buf

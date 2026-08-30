@@ -1,0 +1,168 @@
+syntax = "proto3";
+
+package vaultlet.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// SecretService is vaultlet's entire network surface.
+//
+// It is deliberately a thin projection of ports.SecretStore: the wire types
+// carry no policy, no backend identity and no vendor concepts. Which backend
+// served a request is invisible to clients by design.
+//
+// Errors are carried as gRPC status codes, never as fields in a response:
+//
+//   NOT_FOUND           no secret at this key
+//   INVALID_ARGUMENT    key or namespace fails the grammar in domain.ParseKey
+//   PERMISSION_DENIED   the principal's policy does not allow this action
+//   FAILED_PRECONDITION the backend is read-only (ports.ErrReadOnly)
+//   ABORTED             expected_version did not match the current version
+//   UNAVAILABLE         the backend could not be reached
+service SecretService {
+  // GetSecret returns the current revision of one secret, including its value.
+  // This is the only RPC that transports secret bytes, which makes it the one
+  // place where a per-read policy check and audit record have to happen.
+  rpc GetSecret(GetSecretRequest) returns (GetSecretResponse);
+
+  // PutSecret creates or replaces a secret and returns the revision it wrote.
+  // Backends that do not accept writes fail with FAILED_PRECONDITION.
+  rpc PutSecret(PutSecretRequest) returns (PutSecretResponse);
+
+  // ListSecrets returns metadata — never values — for every secret at or
+  // beneath a namespace.
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+
+  // DeleteSecret removes a secret. Deleting a key that does not exist is
+  // NOT_FOUND rather than a silent success, so callers can tell the two apart.
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
+
+  // WatchSecrets subscribes to a namespace and pushes an event whenever a
+  // secret under it is added, updated or deleted.
+  //
+  // The stream opens with one ADDED event per secret currently in the
+  // namespace, followed by a single IN_SYNC event. A client can therefore
+  // subscribe without a separate ListSecrets call, and without the race that
+  // list-then-watch would leave between the two.
+  //
+  // Events carry metadata only. To read a rotated value the client calls
+  // GetSecret, so secret bytes stay on one authorized, audited path instead of
+  // flowing down a long-lived stream whose policy was checked once at subscribe
+  // time.
+  rpc WatchSecrets(WatchSecretsRequest) returns (stream WatchSecretsResponse);
+}
+
+// SecretMeta describes a secret without exposing its value. It is safe to log
+// and is what ListSecrets and WatchSecrets return.
+message SecretMeta {
+  // Canonical "namespace/name", e.g. "payments/prod/DB_URL". The string form is
+  // the wire form: domain.ParseKey is the single validator, at the edge.
+  string key = 1;
+
+  // Opaque, backend-specific revision identifier. Compare for equality only —
+  // it carries no ordering. Use created_at for chronology.
+  string version = 2;
+
+  google.protobuf.Timestamp created_at = 3;
+}
+
+// Secret is one revision of a secret, including its value.
+message Secret {
+  SecretMeta meta = 1;
+
+  // Raw bytes, not a string: values are not required to be valid UTF-8, and
+  // bytes keeps them out of anything that reflects over string fields.
+  bytes value = 2;
+}
+
+message GetSecretRequest {
+  string key = 1;
+}
+
+message GetSecretResponse {
+  Secret secret = 1;
+}
+
+message PutSecretRequest {
+  string key = 1;
+  bytes value = 2;
+
+  // Optimistic concurrency. When set, the write is applied only if the current
+  // revision matches, and fails with ABORTED otherwise. An unset field means an
+  // unconditional write.
+  //
+  // A server whose backend cannot honour this MUST fail with UNIMPLEMENTED
+  // rather than ignore it — a caller that believes it has compare-and-swap and
+  // does not is worse off than one that never asked.
+  optional string expected_version = 3;
+}
+
+message PutSecretResponse {
+  // Metadata for the revision just written.
+  SecretMeta meta = 1;
+}
+
+message ListSecretsRequest {
+  // Namespace to list, e.g. "payments/prod". Listing is recursive: everything
+  // at or beneath the namespace is returned. An empty namespace lists
+  // everything the principal may see.
+  string namespace = 1;
+
+  // Server may return fewer than requested. Zero means the server chooses.
+  int32 page_size = 2;
+
+  // next_page_token from a previous response. All other fields must match the
+  // request that produced it.
+  string page_token = 3;
+}
+
+message ListSecretsResponse {
+  // Sorted by key. Never carries values.
+  repeated SecretMeta secrets = 1;
+
+  // Empty when this is the last page.
+  string next_page_token = 2;
+}
+
+message DeleteSecretRequest {
+  string key = 1;
+
+  // Same semantics as PutSecretRequest.expected_version.
+  optional string expected_version = 2;
+}
+
+// Empty today. It exists as a named message so that a future field — a tombstone
+// version, say — is an additive change rather than a new response type.
+message DeleteSecretResponse {}
+
+message WatchSecretsRequest {
+  // Namespace to subscribe to. Recursive, like ListSecrets.
+  string namespace = 1;
+}
+
+message WatchSecretsResponse {
+  SecretEvent event = 1;
+}
+
+message SecretEvent {
+  SecretEventType type = 1;
+
+  // Set for ADDED, UPDATED and DELETED; unset for IN_SYNC. On DELETED, version
+  // is the last revision observed before the secret went away.
+  SecretMeta meta = 2;
+}
+
+enum SecretEventType {
+  SECRET_EVENT_TYPE_UNSPECIFIED = 0;
+
+  // A secret appeared in the namespace, or is part of the initial snapshot.
+  SECRET_EVENT_TYPE_ADDED = 1;
+
+  // The value behind an existing key changed; version is the new revision.
+  SECRET_EVENT_TYPE_UPDATED = 2;
+
+  SECRET_EVENT_TYPE_DELETED = 3;
+
+  // The initial snapshot is complete. Everything after this point is a live
+  // change. Sent exactly once per stream, carrying no meta.
+  SECRET_EVENT_TYPE_IN_SYNC = 4;
+}
