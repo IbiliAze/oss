@@ -21,5 +21,8 @@ func (c Config) Validate() error {
 	if c.ProjectID == "" {
 		return errors.New("bitwarden: project_id required")
 	}
+	if c.OrgID == "" {
+		return errors.New("bitwarden: org_id required")
+	}
 	return nil
 }
