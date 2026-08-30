@@ -5,7 +5,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/IbiliAze/vaultlet/internal/adapters/bitwarden"
+	"github.com/IbiliAze/vaultlet/internal/adapters/driven/bitwarden"
+	"github.com/IbiliAze/vaultlet/internal/adapters/driving/grpcserver"
 	"github.com/IbiliAze/vaultlet/internal/config"
 	"github.com/IbiliAze/vaultlet/internal/ports"
 )
@@ -31,6 +32,8 @@ func run() error {
 		defer closer.Close()
 	}
 
+	server := grpcserver.New(store)
+	server.Listen(cfg.Listen)
 	return nil
 }
 

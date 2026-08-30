@@ -13,7 +13,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/IbiliAze/vaultlet/internal/adapters/cli"
+	"github.com/IbiliAze/vaultlet/internal/adapters/driving/cli"
 )
 
 func main() {

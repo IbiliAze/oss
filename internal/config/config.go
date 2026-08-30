@@ -3,7 +3,7 @@ package config
 import (
 	"strings"
 
-	"github.com/IbiliAze/vaultlet/internal/adapters/bitwarden"
+	"github.com/IbiliAze/vaultlet/internal/adapters/driven/bitwarden"
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/dotenv"
 	"github.com/knadh/koanf/parsers/yaml"
