@@ -63,3 +63,19 @@ proto-verify: proto ## CI gate: fail if generated code is out of date
 .PHONY: proto-clean
 proto-clean: ## Remove generated code and local tooling
 	rm -rf $(GEN_DIR) $(BIN)
+
+# ---- build ----
+VERSION  := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+DATE     := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+CLI_PKG  := github.com/IbiliAze/vaultlet/internal/adapters/cli
+LDFLAGS  := -X $(CLI_PKG).version=$(VERSION) -X $(CLI_PKG).commit=$(COMMIT) -X $(CLI_PKG).date=$(DATE)
+
+.PHONY: build
+build: | $(BIN) ## Build server and CLI into ./bin
+	go build -o $(BIN)/vaultlet ./cmd/vaultlet
+	go build -ldflags '$(LDFLAGS)' -o $(BIN)/vaultlet-cli ./cmd/vaultlet-cli
+
+.PHONY: test
+test: ## Run unit tests
+	go test ./...
