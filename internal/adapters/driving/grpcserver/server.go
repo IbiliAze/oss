@@ -1,7 +1,7 @@
 package grpcserver
 
 import (
-	"log"
+	"log/slog"
 	"net"
 
 	vaultletv1 "github.com/IbiliAze/vaultlet/api/gen/vaultlet/v1"
@@ -25,13 +25,13 @@ func New(store ports.SecretStore) *Server {
 func (s *Server) Listen(port string) {
 	listener, err := net.Listen("tcp", port)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error(err.Error())
 	}
 
-	log.Printf("%s", "Listening on "+port)
+	slog.Info("Listening on " + port)
 
 	if err := s.grpc.Serve(listener); err != nil {
-		log.Fatal(err)
+		slog.Error(err.Error())
 	}
 }
 
