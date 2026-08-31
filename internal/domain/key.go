@@ -155,6 +155,3 @@ func (n Namespace) Contains(other Namespace) bool {
 	}
 	return true
 }
-
-// Matches reports whether n satisfies a glob pattern such as "payments/*"
-// or "payments/**". A

@@ -10,6 +10,7 @@ import (
 // ErrNotFound is returned by Get and Delete when no secret exists at the key.
 // Every backend must wrap this so callers can test with errors.Is.
 var ErrNotFound = errors.New("secret not found")
+var ErrReadOnly = errors.New("store is read-only")
 
 type SecretStore interface {
 	Get(ctx context.Context, key domain.Key) (domain.Secret, error)

@@ -24,6 +24,10 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
+
 	store, err := newStore(cfg)
 	if err != nil {
 		return fmt.Errorf("open backend %q: %w", cfg.Backend, err)
