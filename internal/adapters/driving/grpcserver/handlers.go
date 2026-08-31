@@ -14,8 +14,6 @@ import (
 )
 
 func (s *Server) GetSecret(ctx context.Context, req *vaultletv1.GetSecretRequest) (*vaultletv1.GetSecretResponse, error) {
-	res := &vaultletv1.GetSecretResponse{}
-
 	key, err := domain.ParseKey(req.Key)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -30,23 +28,88 @@ func (s *Server) GetSecret(ctx context.Context, req *vaultletv1.GetSecretRequest
 		return nil, status.Error(codes.Internal, "internal error")
 	}
 
-	res.Secret = &vaultletv1.Secret{
+	meta := secret.Meta()
+
+	return &vaultletv1.GetSecretResponse{Secret: &vaultletv1.Secret{
 		Value: secret.Value(),
 		Meta: &vaultletv1.SecretMeta{
-			Key:       secret.Meta().Key.String(),
-			Version:   secret.Meta().Version.String(),
-			CreatedAt: timestamppb.New(secret.Meta().CreatedAt),
-		},
+			Key:       meta.Key.String(),
+			Version:   meta.Version.String(),
+			CreatedAt: timestamppb.New(meta.CreatedAt),
+		}}}, nil
+}
+
+func (s *Server) PutSecret(ctx context.Context, req *vaultletv1.PutSecretRequest) (*vaultletv1.PutSecretResponse, error) {
+	key, err := domain.ParseKey(req.Key)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	return res, nil
+	if req.ExpectedVersion != nil {
+		return nil, status.Error(codes.Unimplemented, "expected_version is not supported")
+	}
+
+	meta, err := s.store.Put(ctx, key, req.Value)
+	if err != nil {
+		if errors.Is(err, domain.ErrEmptyValue) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		slog.ErrorContext(ctx, "put secret", "key", key, "err", err)
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	return &vaultletv1.PutSecretResponse{Meta: &vaultletv1.SecretMeta{
+		Key:       meta.Key.String(),
+		Version:   meta.Version.String(),
+		CreatedAt: timestamppb.New(meta.CreatedAt),
+	}}, nil
 }
 
-func (s *Server) PutSecret(context.Context, *vaultletv1.PutSecretRequest) (*vaultletv1.PutSecretResponse, error) {
+func (s *Server) ListSecrets(ctx context.Context, req *vaultletv1.ListSecretsRequest) (*vaultletv1.ListSecretsResponse, error) {
+	var ns domain.Namespace
+	if req.Namespace != "" {
+		parsed, err := domain.ParseNamespace(req.Namespace)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		ns = parsed
+	}
+
+	if req.PageToken != "" {
+		return nil, status.Error(codes.InvalidArgument, "unknown page token")
+	}
+
+	metas, err := s.store.List(ctx, ns)
+	if err != nil {
+		slog.ErrorContext(ctx, "list secrets", "err", err)
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	out := make([]*vaultletv1.SecretMeta, 0, len(metas))
+	for _, meta := range metas {
+		out = append(out, &vaultletv1.SecretMeta{
+			Key:       meta.Key.String(),
+			Version:   meta.Version.String(),
+			CreatedAt: timestamppb.New(meta.CreatedAt),
+		})
+	}
+
+	return &vaultletv1.ListSecretsResponse{Secrets: out, NextPageToken: ""}, nil
 }
 
-func (s *Server) ListSecrets(context.Context, *vaultletv1.ListSecretsRequest) (*vaultletv1.ListSecretsResponse, error) {
-}
+func (s *Server) DeleteSecret(ctx context.Context, req *vaultletv1.DeleteSecretRequest) (*vaultletv1.DeleteSecretResponse, error) {
+	key, err := domain.ParseKey(req.Key)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 
-func (s *Server) DeleteSecret(context.Context, *vaultletv1.DeleteSecretRequest) (*vaultletv1.DeleteSecretResponse, error) {
+	if err := s.store.Delete(ctx, key); err != nil {
+		if errors.Is(err, ports.ErrNotFound) {
+			return nil, status.Errorf(codes.NotFound, "no secret at %s", key)
+		}
+		slog.ErrorContext(ctx, "delete secret", "key", key, "err", err)
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	return &vaultletv1.DeleteSecretResponse{}, nil
 }

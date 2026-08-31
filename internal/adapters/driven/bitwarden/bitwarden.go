@@ -102,13 +102,13 @@ func (s *Store) inProject(projectIDs []string) bool {
 	return false
 }
 
-func (s *Store) Put(ctx context.Context, key domain.Key, value []byte) (domain.Version, error) {
+func (s *Store) Put(ctx context.Context, key domain.Key, value []byte) (domain.SecretMeta, error) {
 	if err := ctx.Err(); err != nil {
-		return domain.Version{}, err
+		return domain.SecretMeta{}, err
 	}
 
 	if len(value) == 0 {
-		return domain.Version{}, domain.ErrEmptyValue
+		return domain.SecretMeta{}, domain.ErrEmptyValue
 	}
 
 	projects := []string{}
@@ -121,24 +121,41 @@ func (s *Store) Put(ctx context.Context, key domain.Key, value []byte) (domain.V
 	case errors.Is(err, ports.ErrNotFound):
 		res, err := s.client.Secrets().Create(key.String(), string(value), "", s.orgID, projects)
 		if err != nil {
-			return domain.Version{}, fmt.Errorf("bitwarden: create secret %s: %w", key, err)
+			return domain.SecretMeta{}, fmt.Errorf("bitwarden: create secret %s: %w", key, err)
 		}
-		return versionAt(res.RevisionDate)
+
+		version, err := versionAt(res.RevisionDate)
+		if err != nil {
+			return domain.SecretMeta{}, fmt.Errorf("bitwarden: secret %s: %w", key, err)
+		}
+		return domain.SecretMeta{
+			Key:       key,
+			Version:   version,
+			CreatedAt: res.CreationDate.UTC(),
+		}, nil
 	case err != nil:
-		return domain.Version{}, err
+		return domain.SecretMeta{}, err
 	}
 
 	// Update replaces every field, so the note has to be carried across.
 	prev, err := s.client.Secrets().Get(id)
 	if err != nil {
-		return domain.Version{}, fmt.Errorf("bitwarden: read secret %s before update: %w", key, err)
+		return domain.SecretMeta{}, fmt.Errorf("bitwarden: read secret %s before update: %w", key, err)
 	}
 
 	res, err := s.client.Secrets().Update(id, key.String(), string(value), prev.Note, s.orgID, projects)
 	if err != nil {
-		return domain.Version{}, fmt.Errorf("bitwarden: update secret %s: %w", key, err)
+		return domain.SecretMeta{}, fmt.Errorf("bitwarden: update secret %s: %w", key, err)
 	}
-	return versionAt(res.RevisionDate)
+	version, err := versionAt(res.RevisionDate)
+	if err != nil {
+		return domain.SecretMeta{}, fmt.Errorf("bitwarden: secret %s: %w", key, err)
+	}
+
+	return domain.SecretMeta{
+		Key:       key,
+		Version:   version,
+		CreatedAt: res.CreationDate.UTC()}, nil
 }
 
 // List returns metadata for every secret at or beneath ns, sorted by key.
