@@ -15,7 +15,7 @@ import (
 
 // Build metadata, set by the linker:
 //
-//	go build -ldflags "-X github.com/IbiliAze/vaultlet/internal/adapters/cli.version=v0.1.0"
+//	go build -ldflags "-X github.com/IbiliAze/vaultlet/internal/adapters/driving/cli.version=v0.1.0"
 var (
 	version = "dev"
 	commit  = "none"
