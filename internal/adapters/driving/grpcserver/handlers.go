@@ -103,6 +103,10 @@ func (s *Server) DeleteSecret(ctx context.Context, req *vaultletv1.DeleteSecretR
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
+	if req.ExpectedVersion != nil {
+		return nil, status.Error(codes.Unimplemented, "expected_version is not supported")
+	}
+
 	if err := s.store.Delete(ctx, key); err != nil {
 		if errors.Is(err, ports.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "no secret at %s", key)
