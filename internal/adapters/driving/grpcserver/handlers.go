@@ -42,7 +42,7 @@ func (s *Server) GetSecret(ctx context.Context, req *vaultletv1.GetSecretRequest
 }
 
 func (s *Server) PutSecret(ctx context.Context, req *vaultletv1.PutSecretRequest) (*vaultletv1.PutSecretResponse, error) {
-	slog.Info("GetSecret invoked")
+	slog.Info("PutSecret invoked")
 
 	key, err := domain.ParseKey(req.Key)
 	if err != nil {
@@ -70,7 +70,7 @@ func (s *Server) PutSecret(ctx context.Context, req *vaultletv1.PutSecretRequest
 }
 
 func (s *Server) ListSecrets(ctx context.Context, req *vaultletv1.ListSecretsRequest) (*vaultletv1.ListSecretsResponse, error) {
-	slog.Info("GetSecret invoked")
+	slog.Info("ListSecrets invoked")
 
 	var ns domain.Namespace
 	if req.Namespace != "" {
@@ -100,11 +100,11 @@ func (s *Server) ListSecrets(ctx context.Context, req *vaultletv1.ListSecretsReq
 		})
 	}
 
-	return &vaultletv1.ListSecretsResponse{Secrets: out, NextPageToken: ""}, nil
+	return &vaultletv1.ListSecretsResponse{Secrets: out}, nil
 }
 
 func (s *Server) DeleteSecret(ctx context.Context, req *vaultletv1.DeleteSecretRequest) (*vaultletv1.DeleteSecretResponse, error) {
-	slog.Info("GetSecret invoked")
+	slog.Info("DeleteSecret invoked")
 
 	key, err := domain.ParseKey(req.Key)
 	if err != nil {

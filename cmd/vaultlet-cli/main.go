@@ -1,6 +1,6 @@
 // Command vaultlet is the client for a vaultlet server.
 //
-// It is a thin shell around internal/adapters/cli: signal handling, and turning
+// It is a thin shell around internal/adapters/driving/cli: signal handling, and turning
 // an error into an exit code. Everything else lives in the adapter, where it
 // can be tested without a process.
 package main
