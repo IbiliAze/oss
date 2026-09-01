@@ -4,3 +4,6 @@
 .env
 
 cert/*
+
+vaultlet.yaml
+vaultlet.yml
