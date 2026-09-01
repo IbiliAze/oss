@@ -6,3 +6,4 @@ bitwarden:
   identity_url: ''
   access_token: ''
   poll_interval: '30s'
+  allow_writes: true

@@ -55,6 +55,9 @@ func (s *Server) PutSecret(ctx context.Context, req *vaultletv1.PutSecretRequest
 
 	meta, err := s.store.Put(ctx, key, req.Value)
 	if err != nil {
+		if errors.Is(err, ports.ErrReadOnly) {
+			return nil, status.Error(codes.FailedPrecondition, "backend is read-only")
+		}
 		if errors.Is(err, domain.ErrEmptyValue) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
@@ -116,6 +119,10 @@ func (s *Server) DeleteSecret(ctx context.Context, req *vaultletv1.DeleteSecretR
 	}
 
 	if err := s.store.Delete(ctx, key); err != nil {
+		if errors.Is(err, ports.ErrReadOnly) {
+			return nil, status.Error(codes.FailedPrecondition, "backend is read-only")
+
+		}
 		if errors.Is(err, ports.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "no secret at %s", key)
 		}

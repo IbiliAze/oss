@@ -1,8 +1,8 @@
 # vaultlet — outstanding work
 
-Status as of 2026-08-31 (`6b8fd65`). `GetSecret`, `ListSecrets` and
-`DeleteSecret` are implemented and verified end to end against Bitwarden;
-`PutSecret` is implemented but untested against a write-enabled token.
+Status as of 2026-09-01 (`49c8a54` + uncommitted read-only support). `GetSecret`,
+`ListSecrets` and `DeleteSecret` are implemented and verified end to end against
+Bitwarden; `PutSecret` is implemented but untested against a write-enabled token.
 
 Ordered roughly by impact. The suggested sequence is at the bottom.
 
@@ -72,13 +72,22 @@ Related: `internal/app/` is an empty directory. The gRPC handlers call
 `ports.SecretStore` directly, which is fine for a pure passthrough but leaves
 nowhere for policy and audit to live. This layer is the natural home for both.
 
-### 1.5 `ports.ErrReadOnly` does not exist
+### 1.5 Read-only backends (`ports.ErrReadOnly`)
 
-- [ ] Not started.
+- [x] Done (uncommitted). `ports.ErrReadOnly` is declared alongside `ErrNotFound`
+      and wrapped by the adapter as `fmt.Errorf("bitwarden: %w", ...)`, so
+      `errors.Is` works across the port boundary.
+- [x] `bitwarden.Config.AllowWrites` (`allow_writes` in `vaultlet.yaml`) gates
+      both writes: `Put` and `Delete` return `ErrReadOnly`, `Get` and `List`
+      are unaffected.
+- [x] `PutSecret` and `DeleteSecret` map it to `FAILED_PRECONDITION` with a
+      fixed "backend is read-only" message, ahead of the `ErrNotFound` and
+      `ErrEmptyValue` branches so it cannot be shadowed. The backend name is not
+      leaked to clients, per the proto's design note.
 
-The proto documents `FAILED_PRECONDITION` for backends that refuse writes, and
-`put.go`'s help text tells users about it. Nothing defines the error or maps it.
-Needed before any read-only backend is added.
+Open question, not a defect: `vaultlet.yaml` ships `allow_writes: true`, so the
+zero value is permissive. Deny-by-default would fail safe for a service the
+proto describes as "read-mostly". Worth deciding deliberately.
 
 ---
 
@@ -90,8 +99,8 @@ Needed before any read-only backend is added.
       (`3f73bf3`); `make build && ./bin/vaultlet-cli version` reports
       `vaultlet 6b8fd65 (commit 6b8fd65, built 2026-08-31T19:03:52Z)`.
       The `root.go` doc comment was corrected too.
-- [ ] One stale path remains: `cmd/vaultlet-cli/main.go:3` still says
-      "a thin shell around internal/adapters/cli".
+- [x] The last stale path in `cmd/vaultlet-cli/main.go:3` was corrected
+      (`49c8a54`). No `internal/adapters/cli` references remain.
 
 ### 2.2 `config.Load` discards both load errors
 
@@ -118,14 +127,11 @@ Needed before any read-only backend is added.
       cleanly at `Contains`. Glob matching remains unimplemented, which is fine
       — nothing depends on it.
 
-### 2.5 Every handler logs "GetSecret invoked"
+### 2.5 Per-RPC invocation logging
 
-- [ ] New, introduced in `e5d8406`.
-
-`PutSecret`, `ListSecrets` and `DeleteSecret` all open with
-`slog.Info("GetSecret invoked")` — a copy-paste slip that makes the access log
-actively misleading. While fixing the strings, three things are worth doing at
-once:
+- [x] The copy-paste slip introduced in `e5d8406` is fixed (`49c8a54`): each
+      handler now names its own RPC rather than all four claiming `GetSecret`.
+- [ ] The logging itself is still thin. Three improvements remain:
 
 - Use `slog.InfoContext(ctx, ...)` to match the `ErrorContext` calls below them.
 - Include the key or namespace as an attribute; a bare "invoked" line carries no
@@ -183,16 +189,23 @@ whole point of the ports design and the best proof the abstraction holds.
       rows overall is far more likely to be a misconfigured machine account than
       an empty vault, and is worth logging as such in `resolveID`. (Confirmed in
       practice: a machine account with no project access reads as an empty org.)
-- [ ] `ListSecretsResponse{..., NextPageToken: ""}` sets a zero value explicitly
-      and can be dropped.
+- [x] `ListSecretsResponse{..., NextPageToken: ""}` — the explicit zero value
+      was dropped (`49c8a54`).
+- [ ] Stray blank lines before a closing brace in the new read-only guards:
+      `handlers.go` in `DeleteSecret`, and `bitwarden.go` in `Delete`. gofmt
+      leaves them, but they do not match the rest of the file. (The `PutSecret`
+      one has already been cleaned up.)
 
 ---
 
 ## Suggested order
 
-1. The `Listen` nil-listener regression (§2.3) — it is a panic on a real path.
-2. The handler log strings (§2.5) and the last stale doc comment (§2.1).
-3. Domain and handler tests, before the surface grows further.
+1. Commit the read-only work (§1.5) — it is complete and building clean.
+2. The `Listen` nil-listener regression (§2.3) — it is a panic on a real path,
+   and now the oldest open bug.
+3. Domain and handler tests, before the surface grows further. The read-only
+   mapping is a good first case: it is pure error translation.
 4. Graceful shutdown in the server (the rest of §2.3).
 5. `WatchSecrets`, including the port change and the Bitwarden polling loop.
-6. TLS, then the policy/audit layer in `internal/app`.
+6. TLS, then the policy/audit layer in `internal/app` — where the logging in
+   §2.5 should end up as an interceptor.

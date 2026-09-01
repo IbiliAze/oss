@@ -12,6 +12,7 @@ type Config struct {
 	ProjectID    string        `koanf:"project_id"`
 	AccessToken  string        `koanf:"access_token"`
 	PollInterval time.Duration `koanf:"poll_interval"`
+	AllowWrites  bool          `koanf:"allow_writes"`
 }
 
 func (c Config) Validate() error {

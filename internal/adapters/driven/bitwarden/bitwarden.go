@@ -15,9 +15,10 @@ import (
 )
 
 type Store struct {
-	client    sdk.BitwardenClientInterface
-	projectID string
-	orgID     string
+	client      sdk.BitwardenClientInterface
+	projectID   string
+	orgID       string
+	allowWrites bool
 }
 
 func New(cfg Config) (*Store, error) {
@@ -35,7 +36,7 @@ func New(cfg Config) (*Store, error) {
 		return nil, fmt.Errorf("bitwarden: access token login: %w", err)
 	}
 
-	return &Store{client: client, projectID: cfg.ProjectID, orgID: cfg.OrgID}, nil
+	return &Store{client: client, projectID: cfg.ProjectID, orgID: cfg.OrgID, allowWrites: cfg.AllowWrites}, nil
 }
 
 // Close releases the FFI handle held by the underlying Rust client.
@@ -107,8 +108,13 @@ func (s *Store) Put(ctx context.Context, key domain.Key, value []byte) (domain.S
 		return domain.SecretMeta{}, err
 	}
 
+	if !s.allowWrites {
+		return domain.SecretMeta{}, fmt.Errorf("bitwarden: %w", ports.ErrReadOnly)
+
+	}
+
 	if len(value) == 0 {
-		return domain.SecretMeta{}, domain.ErrEmptyValue
+		return domain.SecretMeta{}, fmt.Errorf("bitwarden: %w", domain.ErrEmptyValue)
 	}
 
 	projects := []string{}
@@ -241,6 +247,11 @@ func versionAt(t time.Time) (domain.Version, error) {
 func (s *Store) Delete(ctx context.Context, key domain.Key) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+
+	if !s.allowWrites {
+		return fmt.Errorf("bitwarden: %w", ports.ErrReadOnly)
+
 	}
 
 	id, err := s.resolveID(key)
