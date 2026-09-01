@@ -59,10 +59,14 @@ hiding it.
       TLSv1.3 with verify code 0, and SIGTERM still drains cleanly through
       the new code path.
 
-Remaining nit, optional: `NewServerTLSFromFile` leaves the server's floor at
-Go's default TLS 1.2; the client pins 1.3. Switching to `tls.LoadX509KeyPair`
-+ `credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, ...})` would
-state the same policy on both halves.
+- [x] The TLS 1.3 floor nit is resolved (uncommitted): `New` now uses
+      `tls.LoadX509KeyPair` + `credentials.NewTLS(&tls.Config{MinVersion:
+      tls.VersionTLS13})`, matching the client's pin. Verified live: openssl
+      handshakes at 1.3 with verify code 0, and a forced `-tls1_2` client is
+      rejected with a protocol-version alert. The explicit `tls.Config` is
+      also where `ClientCAs`/`ClientAuth` would go if mTLS is ever wanted.
+
+Nothing remains; §1.3 is complete.
 
 ### 1.4 No authentication, authorization or audit
 

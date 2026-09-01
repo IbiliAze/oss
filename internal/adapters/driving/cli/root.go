@@ -8,6 +8,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -26,6 +27,7 @@ var (
 // NewRootCmd and handed to each subcommand, so no command reads global state.
 type options struct {
 	server   string
+	token    string
 	timeout  time.Duration
 	insecure bool
 	caFile   string
@@ -51,6 +53,7 @@ func NewRootCmd() *cobra.Command {
 
 	f := cmd.PersistentFlags()
 	f.StringVar(&opts.server, "server", "localhost:50051", "address of the vaultlet server")
+	f.StringVar(&opts.token, "token", os.Getenv("VAULTLET_TOKEN"), "base64 username:password sent with every RPC; defaults to $VAULTLET_TOKEN")
 	f.DurationVar(&opts.timeout, "timeout", 10*time.Second, "per-request timeout (watch is exempt)")
 	f.BoolVar(&opts.insecure, "insecure", false, "disable TLS — development only")
 	f.StringVar(&opts.caFile, "ca", "", "PEM bundle used to verify the server certificate")

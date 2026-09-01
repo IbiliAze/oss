@@ -18,11 +18,21 @@ type TLSConfig struct {
 	KeyFile  string `koanf:"key_file"`
 }
 
+type UserConfig struct {
+	Username     string `koanf:"username"`
+	PasswordHash string `koanf:"password_hash"`
+}
+
+type AuthConfig struct {
+	Users []UserConfig `koanf:"users"`
+}
+
 type Config struct {
 	Listen    string           `koanf:"listen"`
 	Backend   string           `koanf:"backend"`
 	Bitwarden bitwarden.Config `koanf:"bitwarden"`
 	TLS       TLSConfig        `koanf:"tls"`
+	Auth      AuthConfig       `koanf:"auth"`
 }
 
 func Load() (Config, error) {
@@ -77,6 +87,17 @@ func (c *Config) Validate() error {
 	}
 	if c.TLS.KeyFile == "" {
 		return errors.New("config: tls.key_file required")
+	}
+	if len(c.Auth.Users) == 0 {
+		return errors.New("config: auth.users required")
+	}
+	for _, user := range c.Auth.Users {
+		if user.Username == "" {
+			return errors.New("config: auth.users[].username required")
+		}
+		if user.PasswordHash == "" {
+			return errors.New("config: auth.users[].password_hash required")
+		}
 	}
 	return nil
 }

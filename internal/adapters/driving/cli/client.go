@@ -24,7 +24,15 @@ func (o *options) connect() (vaultletv1.SecretServiceClient, func() error, error
 		return nil, nil, err
 	}
 
-	conn, err := grpc.NewClient(o.server, grpc.WithTransportCredentials(creds))
+	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(creds)}
+	if o.token != "" {
+		if o.insecure {
+			return nil, nil, errors.New("--insecure and --token are mutually exclusive")
+		}
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(tokenCreds{token: o.token}))
+	}
+
+	conn, err := grpc.NewClient(o.server, dialOpts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("dial %s: %w", o.server, err)
 	}

@@ -2,6 +2,7 @@ package grpcserver
 
 import (
 	"context"
+	"crypto/tls"
 	"log/slog"
 	"net"
 	"time"
@@ -26,10 +27,15 @@ type Server struct {
 func New(store ports.SecretStore, tlsCfg config.TLSConfig) (*Server, error) {
 	s := &Server{store: store}
 
-	creds, err := credentials.NewServerTLSFromFile(tlsCfg.CertFile, tlsCfg.KeyFile)
+	cert, err := tls.LoadX509KeyPair(tlsCfg.CertFile, tlsCfg.KeyFile)
 	if err != nil {
 		return nil, err
 	}
+	// TLS 1.3 floor: the same policy the CLI pins on its side of the dial.
+	creds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS13,
+	})
 	s.grpc = grpc.NewServer(grpc.Creds(creds))
 	vaultletv1.RegisterSecretServiceServer(s.grpc, s)
 	return s, nil
