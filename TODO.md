@@ -1,7 +1,6 @@
 # vaultlet — outstanding work
 
-Status as of 2026-09-01 (`02eac5a` + uncommitted graceful shutdown and server
-TLS). `GetSecret`,
+Status as of 2026-09-01 (`89b0bdc`). `GetSecret`,
 `ListSecrets` and `DeleteSecret` are implemented and verified end to end against
 Bitwarden; `PutSecret` is implemented but untested against a write-enabled token.
 
@@ -50,7 +49,7 @@ hiding it.
 
 ### 1.3 No TLS on the server
 
-- [x] Done (uncommitted). `config.TLSConfig` (`tls.cert_file` / `tls.key_file`
+- [x] Done (`89b0bdc`). `config.TLSConfig` (`tls.cert_file` / `tls.key_file`
       in `vaultlet.yaml`) feeds `grpcserver.New(store, cfg.TLS)`, which builds
       the server with `grpc.Creds(...)` via `credentials.NewServerTLSFromFile`.
       TLS is mandatory — there is no plaintext mode — and `Validate()` rejects
@@ -119,7 +118,7 @@ proto describes as "read-mostly". Worth deciding deliberately.
 ### 2.3 The server cannot shut down cleanly
 
 - [x] `server.go` moved off `log` onto `slog`.
-- [x] Graceful shutdown implemented (uncommitted). `run()` builds a
+- [x] Graceful shutdown implemented (`d096586`). `run()` builds a
       signal-aware context via `signal.NotifyContext` (SIGINT/SIGTERM);
       `Listen` runs `Serve` in a goroutine and selects on `ctx.Done()`, then
       drains via `GracefulStop` bounded by a 10s `shutdownTimeout` with a
@@ -202,19 +201,16 @@ whole point of the ports design and the best proof the abstraction holds.
       practice: a machine account with no project access reads as an empty org.)
 - [x] `ListSecretsResponse{..., NextPageToken: ""}` — the explicit zero value
       was dropped (`49c8a54`).
-- [ ] Stray blank lines before a closing brace in the new read-only guards:
-      `handlers.go` in `DeleteSecret`, and `bitwarden.go` in `Delete`. gofmt
-      leaves them, but they do not match the rest of the file. (The `PutSecret`
-      one has already been cleaned up.)
+- [x] Stray blank lines before a closing brace in the read-only guards
+      (`handlers.go` `DeleteSecret`, `bitwarden.go` `Delete`) — removed
+      (uncommitted). All three sites are now clean.
 
 ---
 
 ## Suggested order
 
-1. Commit the graceful-shutdown (§2.3) and server-TLS (§1.3) work — both are
-   complete, verified live, and building clean.
-2. Domain and handler tests, before the surface grows further. The read-only
+1. Domain and handler tests, before the surface grows further. The read-only
    mapping is a good first case: it is pure error translation.
-3. `WatchSecrets`, including the port change and the Bitwarden polling loop.
-4. The policy/audit layer in `internal/app` — where the logging in §2.5
+2. `WatchSecrets`, including the port change and the Bitwarden polling loop.
+3. The policy/audit layer in `internal/app` — where the logging in §2.5
    should end up as an interceptor.

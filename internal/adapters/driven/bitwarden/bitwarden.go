@@ -251,7 +251,6 @@ func (s *Store) Delete(ctx context.Context, key domain.Key) error {
 
 	if !s.allowWrites {
 		return fmt.Errorf("bitwarden: %w", ports.ErrReadOnly)
-
 	}
 
 	id, err := s.resolveID(key)
