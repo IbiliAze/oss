@@ -22,9 +22,10 @@ type Server struct {
 	vaultletv1.UnimplementedSecretServiceServer
 	store ports.SecretStore
 	grpc  *grpc.Server
+	users map[string]string
 }
 
-func New(store ports.SecretStore, tlsCfg config.TLSConfig) (*Server, error) {
+func New(store ports.SecretStore, tlsCfg config.TLSConfig, auth config.AuthConfig) (*Server, error) {
 	s := &Server{store: store}
 
 	cert, err := tls.LoadX509KeyPair(tlsCfg.CertFile, tlsCfg.KeyFile)
@@ -36,8 +37,14 @@ func New(store ports.SecretStore, tlsCfg config.TLSConfig) (*Server, error) {
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS13,
 	})
-	s.grpc = grpc.NewServer(grpc.Creds(creds))
+	s.users = usersByName(auth.Users)
+	s.grpc = grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.ChainUnaryInterceptor(s.unaryAuth()),
+		grpc.ChainStreamInterceptor(s.streamAuth()),
+	)
 	vaultletv1.RegisterSecretServiceServer(s.grpc, s)
+
 	return s, nil
 }
 

@@ -70,7 +70,22 @@ Nothing remains; §1.3 is complete.
 
 ### 1.4 No authentication, authorization or audit
 
-- [ ] Not started.
+- [x] Authentication (uncommitted). The CLI sends `--token` /
+      `$VAULTLET_TOKEN` — base64("user:password") — as `authorization: Basic`
+      per-RPC credentials (`tokenCreds` refuses plaintext transport). The
+      server verifies it in unary + stream interceptors (`grpcserver/auth.go`)
+      against bcrypt hashes in `auth.users`, answering every failure mode with
+      the same `UNAUTHENTICATED "invalid credentials"` (unknown users burn a
+      dummy bcrypt compare so timing matches). The principal lands in the
+      context via `app.WithPrincipal`. Verified live: no token, wrong
+      password, and malformed token all rejected; valid token lists secrets.
+- [ ] Authorization: not started. Next: per-user `allow` rules
+      (namespace + actions) in config, evaluated deny-by-default in an
+      `app.Service` decorator around `ports.SecretStore`, using
+      `Namespace.Contains`; `List` filters to what the principal may see.
+- [ ] Audit: not started. One structured record per decision in the app
+      layer (principal, action, key, decision, outcome — never values), plus
+      method/duration/status logging in the interceptor, absorbing §2.5.
 
 The proto commits to `PERMISSION_DENIED` and "the principal's policy", and the
 `GetSecret` comment calls it "the one place where a per-read policy check and

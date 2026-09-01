@@ -42,7 +42,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	server, err := grpcserver.New(store, cfg.TLS)
+	server, err := grpcserver.New(store, cfg.TLS, cfg.Auth)
 	if err != nil {
 		return fmt.Errorf("server initialisation: %w", err)
 	}
