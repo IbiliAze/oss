@@ -1,6 +1,6 @@
 # vaultlet — outstanding work
 
-Status as of 2026-09-01 (`49c8a54` + uncommitted read-only support). `GetSecret`,
+Status as of 2026-09-01 (`02eac5a` + uncommitted graceful shutdown). `GetSecret`,
 `ListSecrets` and `DeleteSecret` are implemented and verified end to end against
 Bitwarden; `PutSecret` is implemented but untested against a write-enabled token.
 
@@ -74,7 +74,7 @@ nowhere for policy and audit to live. This layer is the natural home for both.
 
 ### 1.5 Read-only backends (`ports.ErrReadOnly`)
 
-- [x] Done (uncommitted). `ports.ErrReadOnly` is declared alongside `ErrNotFound`
+- [x] Done (`02eac5a`). `ports.ErrReadOnly` is declared alongside `ErrNotFound`
       and wrapped by the adapter as `fmt.Errorf("bitwarden: %w", ...)`, so
       `errors.Is` works across the port boundary.
 - [x] `bitwarden.Config.AllowWrites` (`allow_writes` in `vaultlet.yaml`) gates
@@ -113,13 +113,18 @@ proto describes as "read-mostly". Worth deciding deliberately.
 ### 2.3 The server cannot shut down cleanly
 
 - [x] `server.go` moved off `log` onto `slog`.
-- [ ] Graceful shutdown is still missing: no signal handling, no
-      `GracefulStop`, and `Listen` still returns no error.
-- [ ] **Regression introduced by the `slog` change.** `Listen` now logs a failed
-      `net.Listen` and *carries on* to `s.grpc.Serve(listener)` with a nil
-      listener, which panics. `log.Fatal` used to stop there. `Listen` should
-      return an `error` and let `run()` in `cmd/vaultlet/main.go` handle it —
-      which also lets the deferred `store.Close()` run.
+- [x] Graceful shutdown implemented (uncommitted). `run()` builds a
+      signal-aware context via `signal.NotifyContext` (SIGINT/SIGTERM);
+      `Listen` runs `Serve` in a goroutine and selects on `ctx.Done()`, then
+      drains via `GracefulStop` bounded by a 10s `shutdownTimeout` with a
+      forced `Stop()` fallback.
+- [x] The nil-listener regression is fixed in the same change: `Listen`
+      returns an `error` for both `net.Listen` and `Serve` failures, and
+      `run()` propagates it.
+- [x] Bonus fix found along the way: the `store.(interface{ Close() error })`
+      assertion in `main.go` never matched the Bitwarden store's `Close()`
+      (no error return), so the FFI handle leaked on every exit. Now asserts
+      `interface{ Close() }`.
 
 ### 2.4 `domain.Namespace.Matches` is an unfinished stub
 
@@ -200,12 +205,10 @@ whole point of the ports design and the best proof the abstraction holds.
 
 ## Suggested order
 
-1. Commit the read-only work (§1.5) — it is complete and building clean.
-2. The `Listen` nil-listener regression (§2.3) — it is a panic on a real path,
-   and now the oldest open bug.
-3. Domain and handler tests, before the surface grows further. The read-only
+1. Commit the graceful-shutdown work (§2.3) — it is complete and building
+   clean.
+2. Domain and handler tests, before the surface grows further. The read-only
    mapping is a good first case: it is pure error translation.
-4. Graceful shutdown in the server (the rest of §2.3).
-5. `WatchSecrets`, including the port change and the Bitwarden polling loop.
-6. TLS, then the policy/audit layer in `internal/app` — where the logging in
+3. `WatchSecrets`, including the port change and the Bitwarden polling loop.
+4. TLS, then the policy/audit layer in `internal/app` — where the logging in
    §2.5 should end up as an interceptor.

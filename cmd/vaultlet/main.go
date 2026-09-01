@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/IbiliAze/vaultlet/internal/adapters/driven/bitwarden"
 	"github.com/IbiliAze/vaultlet/internal/adapters/driving/grpcserver"
@@ -32,12 +35,17 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("open backend %q: %w", cfg.Backend, err)
 	}
-	if closer, ok := store.(interface{ Close() error }); ok {
+	if closer, ok := store.(interface{ Close() }); ok {
 		defer closer.Close()
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	server := grpcserver.New(store)
-	server.Listen(cfg.Listen)
+	if err := server.Listen(ctx, cfg.Listen); err != nil {
+		return fmt.Errorf("listen %q: %w", cfg.Listen, err)
+	}
 	return nil
 }
 
