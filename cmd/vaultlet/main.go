@@ -42,7 +42,11 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	server := grpcserver.New(store)
+	server, err := grpcserver.New(store, cfg.TLS)
+	if err != nil {
+		return fmt.Errorf("server initialisation: %w", err)
+	}
+
 	if err := server.Listen(ctx, cfg.Listen); err != nil {
 		return fmt.Errorf("listen %q: %w", cfg.Listen, err)
 	}

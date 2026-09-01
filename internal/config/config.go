@@ -13,10 +13,16 @@ import (
 	"github.com/knadh/koanf/providers/file"
 )
 
+type TLSConfig struct {
+	CertFile string `koanf:"cert_file"`
+	KeyFile  string `koanf:"key_file"`
+}
+
 type Config struct {
 	Listen    string           `koanf:"listen"`
 	Backend   string           `koanf:"backend"`
 	Bitwarden bitwarden.Config `koanf:"bitwarden"`
+	TLS       TLSConfig        `koanf:"tls"`
 }
 
 func Load() (Config, error) {
@@ -65,6 +71,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Listen == "" {
 		return errors.New("config: listen required")
+	}
+	if c.TLS.CertFile == "" {
+		return errors.New("config: tls.cert_file required")
+	}
+	if c.TLS.KeyFile == "" {
+		return errors.New("config: tls.key_file required")
 	}
 	return nil
 }

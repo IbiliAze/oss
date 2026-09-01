@@ -1,6 +1,7 @@
 # vaultlet — outstanding work
 
-Status as of 2026-09-01 (`02eac5a` + uncommitted graceful shutdown). `GetSecret`,
+Status as of 2026-09-01 (`02eac5a` + uncommitted graceful shutdown and server
+TLS). `GetSecret`,
 `ListSecrets` and `DeleteSecret` are implemented and verified end to end against
 Bitwarden; `PutSecret` is implemented but untested against a write-enabled token.
 
@@ -49,15 +50,20 @@ hiding it.
 
 ### 1.3 No TLS on the server
 
-- [ ] Not started.
+- [x] Done (uncommitted). `config.TLSConfig` (`tls.cert_file` / `tls.key_file`
+      in `vaultlet.yaml`) feeds `grpcserver.New(store, cfg.TLS)`, which builds
+      the server with `grpc.Creds(...)` via `credentials.NewServerTLSFromFile`.
+      TLS is mandatory — there is no plaintext mode — and `Validate()` rejects
+      missing cert/key paths with clear messages before startup.
+- [x] Verified live: booted with the self-signed dev cert in `cert/`
+      (gitignored), `openssl s_client -CAfile cert/cert.pem` handshakes
+      TLSv1.3 with verify code 0, and SIGTERM still drains cleanly through
+      the new code path.
 
-`grpcserver.New` builds a bare `grpc.NewServer()` with no `grpc.Creds`, so the
-server is plaintext. The client defaults to TLS against system roots. Out of the
-box the two halves cannot talk, and `--insecure` is not a dev convenience but
-the only working mode.
-
-Needs cert/key paths in `config.Config`, `grpc.Creds(...)` on the server, and
-`--ca` on the client for a self-signed cert.
+Remaining nit, optional: `NewServerTLSFromFile` leaves the server's floor at
+Go's default TLS 1.2; the client pins 1.3. Switching to `tls.LoadX509KeyPair`
++ `credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, ...})` would
+state the same policy on both halves.
 
 ### 1.4 No authentication, authorization or audit
 
@@ -205,10 +211,10 @@ whole point of the ports design and the best proof the abstraction holds.
 
 ## Suggested order
 
-1. Commit the graceful-shutdown work (§2.3) — it is complete and building
-   clean.
+1. Commit the graceful-shutdown (§2.3) and server-TLS (§1.3) work — both are
+   complete, verified live, and building clean.
 2. Domain and handler tests, before the surface grows further. The read-only
    mapping is a good first case: it is pure error translation.
 3. `WatchSecrets`, including the port change and the Bitwarden polling loop.
-4. TLS, then the policy/audit layer in `internal/app` — where the logging in
-   §2.5 should end up as an interceptor.
+4. The policy/audit layer in `internal/app` — where the logging in §2.5
+   should end up as an interceptor.

@@ -7,8 +7,10 @@ import (
 	"time"
 
 	vaultletv1 "github.com/IbiliAze/vaultlet/api/gen/vaultlet/v1"
+	"github.com/IbiliAze/vaultlet/internal/config"
 	"github.com/IbiliAze/vaultlet/internal/ports"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // shutdownTimeout bounds GracefulStop's drain; it must stay under the
@@ -21,11 +23,16 @@ type Server struct {
 	grpc  *grpc.Server
 }
 
-func New(store ports.SecretStore) *Server {
+func New(store ports.SecretStore, tlsCfg config.TLSConfig) (*Server, error) {
 	s := &Server{store: store}
-	s.grpc = grpc.NewServer()
+
+	creds, err := credentials.NewServerTLSFromFile(tlsCfg.CertFile, tlsCfg.KeyFile)
+	if err != nil {
+		return nil, err
+	}
+	s.grpc = grpc.NewServer(grpc.Creds(creds))
 	vaultletv1.RegisterSecretServiceServer(s.grpc, s)
-	return s
+	return s, nil
 }
 
 func (s *Server) Listen(ctx context.Context, port string) error {
