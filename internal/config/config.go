@@ -19,8 +19,14 @@ type TLSConfig struct {
 }
 
 type UserConfig struct {
-	Username     string `koanf:"username"`
-	PasswordHash string `koanf:"password_hash"`
+	Username     string            `koanf:"username"`
+	PasswordHash string            `koanf:"password_hash"`
+	Allow        []UserAllowConfig `koanf:"allow"`
+}
+
+type UserAllowConfig struct {
+	Namespace string   `koanf:"namespace"`
+	Actions   []string `koanf:"actions"`
 }
 
 type AuthConfig struct {
@@ -97,6 +103,15 @@ func (c *Config) Validate() error {
 		}
 		if user.PasswordHash == "" {
 			return errors.New("config: auth.users[].password_hash required")
+		}
+		if len(user.Allow) == 0 {
+			return errors.New("config: auth.users[].allow required")
+		}
+
+		for _, rule := range user.Allow {
+			if rule.Namespace == "" {
+				return errors.New("config: auth.users[].allow[].namespace required")
+			}
 		}
 	}
 	return nil

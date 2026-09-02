@@ -16,3 +16,6 @@ auth:
     # Clients authenticate with --token set to base64("<username>:<password>").
     - username: ''
       password_hash: ''
+      allow:
+        - namespace: '*'
+          actions: [get, list, watch]
