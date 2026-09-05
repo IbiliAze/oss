@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	vaultletv1 "github.com/IbiliAze/vaultlet/api/gen/vaultlet/v1"
+	"github.com/IbiliAze/vaultlet/internal/app"
 	"github.com/IbiliAze/vaultlet/internal/domain"
 	"github.com/IbiliAze/vaultlet/internal/ports"
 	"google.golang.org/grpc/codes"
@@ -23,9 +24,14 @@ func (s *Server) GetSecret(ctx context.Context, req *vaultletv1.GetSecretRequest
 
 	secret, err := s.store.Get(ctx, key)
 	if err != nil {
+		if errors.Is(err, app.ErrPermissionDenied) {
+			return nil, status.Error(codes.PermissionDenied, "permission denied")
+		}
+
 		if errors.Is(err, ports.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "no secret at %s", key)
 		}
+
 		slog.ErrorContext(ctx, "get secret", "key", key, "err", err)
 		return nil, status.Error(codes.Internal, "internal error")
 	}
@@ -55,9 +61,14 @@ func (s *Server) PutSecret(ctx context.Context, req *vaultletv1.PutSecretRequest
 
 	meta, err := s.store.Put(ctx, key, req.Value)
 	if err != nil {
+		if errors.Is(err, app.ErrPermissionDenied) {
+			return nil, status.Error(codes.PermissionDenied, "permission denied")
+		}
+
 		if errors.Is(err, ports.ErrReadOnly) {
 			return nil, status.Error(codes.FailedPrecondition, "backend is read-only")
 		}
+
 		if errors.Is(err, domain.ErrEmptyValue) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
@@ -90,6 +101,10 @@ func (s *Server) ListSecrets(ctx context.Context, req *vaultletv1.ListSecretsReq
 
 	metas, err := s.store.List(ctx, ns)
 	if err != nil {
+		if errors.Is(err, app.ErrPermissionDenied) {
+			return nil, status.Error(codes.PermissionDenied, "permission denied")
+		}
+
 		slog.ErrorContext(ctx, "list secrets", "err", err)
 		return nil, status.Error(codes.Internal, "internal error")
 	}
@@ -119,12 +134,18 @@ func (s *Server) DeleteSecret(ctx context.Context, req *vaultletv1.DeleteSecretR
 	}
 
 	if err := s.store.Delete(ctx, key); err != nil {
+		if errors.Is(err, app.ErrPermissionDenied) {
+			return nil, status.Error(codes.PermissionDenied, "permission denied")
+		}
+
 		if errors.Is(err, ports.ErrReadOnly) {
 			return nil, status.Error(codes.FailedPrecondition, "backend is read-only")
 		}
+
 		if errors.Is(err, ports.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "no secret at %s", key)
 		}
+
 		slog.ErrorContext(ctx, "delete secret", "key", key, "err", err)
 		return nil, status.Error(codes.Internal, "internal error")
 	}

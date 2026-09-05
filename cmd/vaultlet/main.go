@@ -10,6 +10,7 @@ import (
 
 	"github.com/IbiliAze/vaultlet/internal/adapters/driven/bitwarden"
 	"github.com/IbiliAze/vaultlet/internal/adapters/driving/grpcserver"
+	service "github.com/IbiliAze/vaultlet/internal/app"
 	"github.com/IbiliAze/vaultlet/internal/config"
 	"github.com/IbiliAze/vaultlet/internal/ports"
 )
@@ -42,7 +43,24 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	server, err := grpcserver.New(store, cfg.TLS, cfg.Auth)
+	var specs []service.RuleSpec
+	for _, user := range cfg.Auth.Users {
+		for _, rule := range user.Allow {
+			specs = append(specs, service.RuleSpec{
+				Principal: user.Username,
+				Namespace: rule.Namespace,
+				Actions:   rule.Actions,
+			})
+		}
+	}
+
+	policy, err := service.NewPolicy(specs)
+	if err != nil {
+		return fmt.Errorf("policy initialisation: %w", err)
+	}
+
+	app := service.NewService(store, policy)
+	server, err := grpcserver.New(app, cfg.TLS, cfg.Auth)
 	if err != nil {
 		return fmt.Errorf("server initialisation: %w", err)
 	}
