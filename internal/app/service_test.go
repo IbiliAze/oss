@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/IbiliAze/vaultlet/internal/domain"
@@ -15,6 +17,7 @@ type fakeStore struct {
 	secrets     map[string]domain.Secret // keyed by key.String()
 	err         error                    // if set, every method returns it
 	getCalls    int
+	listCalls   int
 	putCalls    int
 	deleteCalls int
 }
@@ -38,8 +41,18 @@ func (f *fakeStore) Put(_ context.Context, key domain.Key, value []byte) (domain
 	}
 	return domain.SecretMeta{Key: key}, nil
 }
-func (f *fakeStore) List(context.Context, domain.Namespace) ([]domain.SecretMeta, error) {
-	return nil, nil
+func (f *fakeStore) List(_ context.Context, ns domain.Namespace) ([]domain.SecretMeta, error) {
+	f.listCalls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	var out []domain.SecretMeta
+	for _, s := range f.secrets {
+		if ns.Contains(s.Key().Namespace()) {
+			out = append(out, s.Meta())
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeStore) Delete(_ context.Context, key domain.Key) error {
@@ -52,6 +65,119 @@ func (f *fakeStore) Delete(_ context.Context, key domain.Key) error {
 	}
 	delete(f.secrets, key.String())
 	return nil
+}
+
+func TestServiceList(t *testing.T) {
+	// Three secrets across three namespaces so the filter loop has
+	// something to keep and something to drop.
+	seed := seedSecrets(t,
+		"payments/prod/A",
+		"payments/dev/B",
+		"billing/C",
+	)
+
+	alice := WithPrincipal(context.Background(), "alice")
+
+	tests := []struct {
+		name       string
+		ctx        context.Context
+		rule       string // namespace alice may list; "" means no rule
+		list       string // namespace requested
+		storeErr   error
+		wantErr    error
+		wantCalled bool
+		wantKeys   []string
+	}{
+		{
+			name: "no principal", ctx: context.Background(),
+			rule: "payments", list: "payments",
+			wantErr: ErrPermissionDenied,
+		},
+		{
+			name: "no rule for principal", ctx: alice,
+			rule: "", list: "payments",
+			wantErr: ErrPermissionDenied,
+		},
+		{
+			name: "namespace outside rule", ctx: alice,
+			rule: "payments", list: "billing",
+			wantErr: ErrPermissionDenied,
+		},
+		{
+			name: "rule covers request", ctx: alice,
+			rule: "payments", list: "payments",
+			wantCalled: true, wantKeys: []string{"payments/dev/B", "payments/prod/A"},
+		},
+		{
+			name: "request narrower than rule", ctx: alice,
+			rule: "payments", list: "payments/prod",
+			wantCalled: true, wantKeys: []string{"payments/prod/A"},
+		},
+		{
+			// canList lets a broad request through when a rule sits inside
+			// it, but the per-key filter must still hide the rest.
+			name: "request broader than rule", ctx: alice,
+			rule: "payments/prod", list: "payments",
+			wantCalled: true, wantKeys: []string{"payments/prod/A"},
+		},
+		{
+			name: "store error passes through", ctx: alice,
+			rule: "payments", list: "payments",
+			storeErr: ports.ErrReadOnly, wantErr: ports.ErrReadOnly,
+			wantCalled: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var specs []RuleSpec
+			if tc.rule != "" {
+				specs = append(specs, RuleSpec{Principal: "alice", Namespace: tc.rule, Actions: []string{"list"}})
+			}
+			policy, err := NewPolicy(specs)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			store := &fakeStore{secrets: maps.Clone(seed), err: tc.storeErr}
+			svc := NewService(store, policy)
+
+			got, err := svc.List(tc.ctx, domain.MustNamespace(tc.list))
+
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tc.wantErr)
+			}
+			if called := store.listCalls > 0; called != tc.wantCalled {
+				t.Errorf("store called = %v, want %v", called, tc.wantCalled)
+			}
+
+			gotKeys := make([]string, 0, len(got))
+			for _, m := range got {
+				gotKeys = append(gotKeys, m.Key.String())
+			}
+			slices.Sort(gotKeys)
+			if !slices.Equal(gotKeys, tc.wantKeys) {
+				t.Errorf("keys = %v, want %v", gotKeys, tc.wantKeys)
+			}
+		})
+	}
+}
+
+// seedSecrets builds a store map with one placeholder secret per key.
+func seedSecrets(t *testing.T, keys ...string) map[string]domain.Secret {
+	t.Helper()
+	out := make(map[string]domain.Secret, len(keys))
+	for _, k := range keys {
+		s, err := domain.NewSecret(domain.SecretMeta{
+			Key:     domain.MustKey(k),
+			Version: mustVersion(t, "v1"),
+		}, []byte("value"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[k] = s
+	}
+	return out
 }
 
 func TestServiceDelete(t *testing.T) {
@@ -223,3 +349,5 @@ func mustVersion(t *testing.T, id string) domain.Version {
 	}
 	return v
 }
+
+var _ ports.SecretStore = (*fakeStore)(nil)
