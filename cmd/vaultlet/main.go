@@ -16,6 +16,8 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+
 	if err := run(); err != nil {
 		slog.Error("fatal", "err", err)
 		os.Exit(1)
