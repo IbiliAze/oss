@@ -70,3 +70,18 @@ func (p Policy) allows(principal string, action Action, ns domain.Namespace) boo
 	}
 	return false
 }
+
+// canList reports whether the requested namespace overlaps
+// any namespace the principal has permission to list.
+func (p Policy) canList(principal string, ns domain.Namespace) bool {
+	for _, r := range p[principal] {
+		if !r.actions[ActionList] {
+			continue
+		}
+
+		if r.namespace.Contains(ns) || ns.Contains(r.namespace) {
+			return true
+		}
+	}
+	return false
+}

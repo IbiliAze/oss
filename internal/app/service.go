@@ -62,20 +62,28 @@ func (s *Service) Put(ctx context.Context, key domain.Key, value []byte) (domain
 
 func (s *Service) List(ctx context.Context, ns domain.Namespace) ([]domain.SecretMeta, error) {
 	principal, ok := PrincipalFromContext(ctx)
-	if !ok || !s.policy.allows(principal, ActionList, ns) {
+	if !ok || !s.policy.canList(principal, ns) {
 		audit(ctx, principal, ActionList, ns.String(), "deny", "denied")
 		return nil, ErrPermissionDenied
 	}
 
 	metas, err := s.store.List(ctx, ns)
-
-	outcome := "success"
 	if err != nil {
-		outcome = "error"
+		audit(ctx, principal, ActionList, ns.String(), "allow", "error")
+		return nil, err
 	}
 
-	audit(ctx, principal, ActionList, ns.String(), "allow", outcome)
-	return metas, err
+	visible := make([]domain.SecretMeta, 0, len(metas))
+	for _, meta := range metas {
+		keyNS := meta.Key.Namespace()
+		if ns.Contains(keyNS) &&
+			s.policy.allows(principal, ActionList, keyNS) {
+			visible = append(visible, meta)
+		}
+	}
+
+	audit(ctx, principal, ActionList, ns.String(), "allow", "success")
+	return visible, nil
 }
 
 func (s *Service) Delete(ctx context.Context, key domain.Key) error {
