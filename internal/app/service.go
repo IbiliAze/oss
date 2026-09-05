@@ -26,46 +26,74 @@ func NewService(store ports.SecretStore, policy Policy) *Service {
 
 func (s *Service) Get(ctx context.Context, key domain.Key) (domain.Secret, error) {
 	principal, ok := PrincipalFromContext(ctx)
-	if !ok {
+	if !ok || !s.policy.allows(principal, ActionGet, key.Namespace()) {
+		audit(ctx, principal, ActionGet, key.String(), "deny", "denied")
 		return domain.Secret{}, ErrPermissionDenied
 	}
-	if !s.policy.allows(principal, ActionGet, key.Namespace()) {
-		return domain.Secret{}, ErrPermissionDenied
+
+	secret, err := s.store.Get(ctx, key)
+
+	outcome := "success"
+	if err != nil {
+		outcome = "error"
 	}
-	return s.store.Get(ctx, key)
+
+	audit(ctx, principal, ActionGet, key.String(), "allow", outcome)
+	return secret, err
 }
 
 func (s *Service) Put(ctx context.Context, key domain.Key, value []byte) (domain.SecretMeta, error) {
 	principal, ok := PrincipalFromContext(ctx)
-	if !ok {
+	if !ok || !s.policy.allows(principal, ActionPut, key.Namespace()) {
+		audit(ctx, principal, ActionPut, key.String(), "deny", "denied")
 		return domain.SecretMeta{}, ErrPermissionDenied
 	}
-	if !s.policy.allows(principal, ActionPut, key.Namespace()) {
-		return domain.SecretMeta{}, ErrPermissionDenied
+
+	meta, err := s.store.Put(ctx, key, value)
+
+	outcome := "success"
+	if err != nil {
+		outcome = "error"
 	}
-	return s.store.Put(ctx, key, value)
+
+	audit(ctx, principal, ActionPut, key.String(), "allow", outcome)
+	return meta, err
 }
 
 func (s *Service) List(ctx context.Context, ns domain.Namespace) ([]domain.SecretMeta, error) {
 	principal, ok := PrincipalFromContext(ctx)
-	if !ok {
+	if !ok || !s.policy.allows(principal, ActionList, ns) {
+		audit(ctx, principal, ActionList, ns.String(), "deny", "denied")
 		return nil, ErrPermissionDenied
 	}
-	if !s.policy.allows(principal, ActionList, ns) {
-		return nil, ErrPermissionDenied
+
+	metas, err := s.store.List(ctx, ns)
+
+	outcome := "success"
+	if err != nil {
+		outcome = "error"
 	}
-	return s.store.List(ctx, ns)
+
+	audit(ctx, principal, ActionList, ns.String(), "allow", outcome)
+	return metas, err
 }
 
 func (s *Service) Delete(ctx context.Context, key domain.Key) error {
 	principal, ok := PrincipalFromContext(ctx)
-	if !ok {
+	if !ok || !s.policy.allows(principal, ActionDelete, key.Namespace()) {
+		audit(ctx, principal, ActionDelete, key.String(), "deny", "denied")
 		return ErrPermissionDenied
 	}
-	if !s.policy.allows(principal, ActionDelete, key.Namespace()) {
-		return ErrPermissionDenied
+
+	err := s.store.Delete(ctx, key)
+
+	outcome := "success"
+	if err != nil {
+		outcome = "error"
 	}
-	return s.store.Delete(ctx, key)
+
+	audit(ctx, principal, ActionDelete, key.String(), "allow", outcome)
+	return err
 }
 
 var _ ports.SecretStore = (*Service)(nil)
