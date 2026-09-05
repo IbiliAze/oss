@@ -1,6 +1,7 @@
 # vaultlet — outstanding work
 
-Status as of 2026-09-01 (`89b0bdc`). `GetSecret`,
+Baseline status as of 2026-09-01 (`89b0bdc`); §1.4 and related logging/test
+notes updated 2026-09-05 against the working tree. `GetSecret`,
 `ListSecrets` and `DeleteSecret` are implemented and verified end to end against
 Bitwarden; `PutSecret` is implemented but untested against a write-enabled token.
 
@@ -68,9 +69,9 @@ hiding it.
 
 Nothing remains; §1.3 is complete.
 
-### 1.4 No authentication, authorization or audit
+### 1.4 Authentication, authorization and audit
 
-- [x] Authentication (uncommitted). The CLI sends `--token` /
+- [x] Authentication implemented. The CLI sends `--token` /
       `$VAULTLET_TOKEN` — base64("user:password") — as `authorization: Basic`
       per-RPC credentials (`tokenCreds` refuses plaintext transport). The
       server verifies it in unary + stream interceptors (`grpcserver/auth.go`)
@@ -79,22 +80,33 @@ Nothing remains; §1.3 is complete.
       dummy bcrypt compare so timing matches). The principal lands in the
       context via `app.WithPrincipal`. Verified live: no token, wrong
       password, and malformed token all rejected; valid token lists secrets.
-- [ ] Authorization: not started. Next: per-user `allow` rules
-      (namespace + actions) in config, evaluated deny-by-default in an
-      `app.Service` decorator around `ports.SecretStore`, using
-      `Namespace.Contains`; `List` filters to what the principal may see.
-- [ ] Audit: not started. One structured record per decision in the app
-      layer (principal, action, key, decision, outcome — never values), plus
-      method/duration/status logging in the interceptor, absorbing §2.5.
+- [x] Authorization implemented. Startup compiles per-user `allow` rules
+      (namespace + actions) into an `app.Policy` and passes an `app.Service`
+      wrapper to gRPC. Checks deny by default using `Namespace.Contains`;
+      all four handlers map `app.ErrPermissionDenied` to `PERMISSION_DENIED`.
+- [x] List filtering implemented. `canList` permits requests overlapping a
+      namespace the principal may list, including ancestor and empty-namespace
+      requests. Each result must be within both the requested namespace and
+      a rule granting `list`. Requests with no permitted overlap skip the
+      backend and return permission denied.
+- [x] Application audit implemented. Get, Put, List and Delete emit one record
+      per normal return path with principal, action, key (namespace for List),
+      decision and outcome. Records contain no values, credentials or raw
+      backend errors. The default server logger writes JSON to stderr.
+- [x] RPC logging implemented in unary and stream interceptors, registered
+      before authentication so rejected credentials are logged too. Records
+      include method, duration in milliseconds and returned gRPC status;
+      streaming duration covers the handler's lifetime. This absorbs §2.5.
+- [ ] Behavioral verification remains: allowed and denied operations, denied
+      calls skipping the backend, List filtering for ancestor/empty namespaces
+      and segment boundaries, backend failures, one audit record per service
+      call, and RPC completion logging for success/authentication/policy errors.
 
-The proto commits to `PERMISSION_DENIED` and "the principal's policy", and the
-`GetSecret` comment calls it "the one place where a per-read policy check and
-audit record have to happen". None of it exists: no interceptor, no principal,
-no policy, no audit record.
-
-Related: `internal/app/` is an empty directory. The gRPC handlers call
-`ports.SecretStore` directly, which is fine for a pure passthrough but leaves
-nowhere for policy and audit to live. This layer is the natural home for both.
+Implementation is complete for the current Get/Put/List/Delete surface.
+`go test ./...` passes, but there are no tests yet; this confirms compilation,
+not runtime authorization or audit behavior. Authentication's earlier live
+verification is recorded above. Watch policy/audit belongs with §1.1 when that
+RPC is implemented.
 
 ### 1.5 Read-only backends (`ports.ErrReadOnly`)
 
@@ -160,14 +172,13 @@ proto describes as "read-mostly". Worth deciding deliberately.
 
 - [x] The copy-paste slip introduced in `e5d8406` is fixed (`49c8a54`): each
       handler now names its own RPC rather than all four claiming `GetSecret`.
-- [ ] The logging itself is still thin. Three improvements remain:
+- [x] Unary and stream logging interceptors now use `slog.InfoContext` to
+      record method, duration and returned status, including authentication
+      failures. The four bare "invoked" lines are removed; handler error logs
+      remain. Key/namespace and principal details live in the application
+      audit records described in §1.4.
 
-- Use `slog.InfoContext(ctx, ...)` to match the `ErrorContext` calls below them.
-- Include the key or namespace as an attribute; a bare "invoked" line carries no
-  information a request counter would not.
-- Consider a `grpc.UnaryInterceptor` instead. One interceptor logs method,
-  duration and resulting status code for every RPC, cannot drift per handler,
-  and is where the audit record from §1.4 will want to live anyway.
+Implementation complete; behavioral verification is tracked in §1.4.
 
 ---
 
@@ -180,10 +191,14 @@ proto describes as "read-mostly". Worth deciding deliberately.
 
 - `domain`: `ParseKey`, `ParseNamespace`, `Namespace.Contains` are pure
   functions against a documented grammar. Cheapest, highest-value tests here.
+- `app`: policy enforcement, filtered listings and audit records, including
+  denied calls never reaching the backend (see §1.4).
 - `grpcserver`: the handlers are testable against a fake `ports.SecretStore` —
   particularly the error mapping (`ErrNotFound` → `NOT_FOUND`, `ErrEmptyValue` →
   `INVALID_ARGUMENT`, empty namespace → list everything, non-empty page token →
   rejected, `expected_version` → `UNIMPLEMENTED` on both put and delete).
+  Also cover `ErrPermissionDenied` → `PERMISSION_DENIED` and interceptor
+  completion records for successful calls and authentication/policy failures.
 - `cli`: `NewRootCmd` returns a `*cobra.Command` specifically so "tests can
   execute commands with their own args and output buffers" — a seam nothing
   currently uses.
@@ -228,8 +243,6 @@ whole point of the ports design and the best proof the abstraction holds.
 
 ## Suggested order
 
-1. Domain and handler tests, before the surface grows further. The read-only
-   mapping is a good first case: it is pure error translation.
+1. Domain, app and handler/interceptor tests, including the authorization and
+   audit verification in §1.4.
 2. `WatchSecrets`, including the port change and the Bitwarden polling loop.
-3. The policy/audit layer in `internal/app` — where the logging in §2.5
-   should end up as an interceptor.

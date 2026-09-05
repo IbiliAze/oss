@@ -40,9 +40,8 @@ func New(store ports.SecretStore, tlsCfg config.TLSConfig, auth config.AuthConfi
 	s.users = usersByName(auth.Users)
 	s.grpc = grpc.NewServer(
 		grpc.Creds(creds),
-		grpc.ChainUnaryInterceptor(s.unaryAuth()),
-		grpc.ChainStreamInterceptor(s.streamAuth()),
-	)
+		grpc.ChainUnaryInterceptor(unaryLogging(), s.unaryAuth()),
+		grpc.ChainStreamInterceptor(streamLogging(), s.streamAuth()))
 	vaultletv1.RegisterSecretServiceServer(s.grpc, s)
 
 	return s, nil
